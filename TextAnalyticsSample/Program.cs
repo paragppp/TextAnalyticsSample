@@ -140,7 +140,6 @@ namespace TextAnalyticsSample
 
         static string getJson(string input, string type, string key, string server_location, RestClient client)
         {
-            //var client = new RestClient($"https://{server_location}.api.cognitive.microsoft.com/text/analytics/v2.0/{type}");
             var request = new RestRequest(Method.POST);
 
             input = input.Substring(1, input.Length - 2);
