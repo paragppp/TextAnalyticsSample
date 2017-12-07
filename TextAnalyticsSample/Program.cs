@@ -11,7 +11,7 @@ namespace TextAnalyticsSample
 {
     class Program
     {
-        struct maledata
+        class maledata
         {
             public string account_id;
             public string create_date;
@@ -25,12 +25,12 @@ namespace TextAnalyticsSample
         }
 
         static void Main(string[] args)
-        {            
+        {
             string[] read;
             char[] seperators = { '\t' };
 
             Console.OutputEncoding = Encoding.Unicode;
-            
+
             // check arguments
             if (args.Length < 4)
             {
@@ -92,7 +92,7 @@ namespace TextAnalyticsSample
                 Console.WriteLine($"read {total} records and {faulty} faulty records in faulty.tsv:");
                 Console.WriteLine("");
 
-                if(File.Exists("faulty.tsv"))
+                if (File.Exists("faulty.tsv"))
                     File.Delete("faulty.tsv");
 
                 File.WriteAllLines("faulty.tsv", faulty_record);
@@ -104,16 +104,19 @@ namespace TextAnalyticsSample
 
             outputlist.Add(outputdata);
 
-            for (int counter = 0; counter < data.Count;counter++)
+            var phrases_client = new RestClient($"https://{server_location}.api.cognitive.microsoft.com/text/analytics/v2.0/keyPhrases");
+            var sentiment_sclient = new RestClient($"https://{server_location}.api.cognitive.microsoft.com/text/analytics/v2.0/sentiment");
+
+            for (int counter = 0; counter < data.Count; counter++)
             {
                 Console.Write($"\rProcessing {counter} of {data.Count}");
                 maledata eachdata = data[counter];
 
                 if (eachdata.profile != "")
                 {
-                    string phrases = analyze_phrases(eachdata.profile, analytics_key, server_location);
+                    string phrases = analyze_phrases(eachdata.profile, analytics_key, server_location, phrases_client);
 
-                    double sentiment = analyze_sentiment(eachdata.profile, analytics_key, server_location);
+                    double sentiment = analyze_sentiment(eachdata.profile, analytics_key, server_location, sentiment_sclient);
 
                     outputdata = $"{eachdata.account_id}\t{eachdata.create_date}\t{eachdata.profile}\t{eachdata.liked_count}\t{eachdata.log_predicted_liked_count}\t{eachdata.log_liked_count}\t{eachdata.account_id2}\t{eachdata.relative_path}\t{eachdata.effect}\t\"{phrases}\"\t\"{sentiment}\"";
 
@@ -135,9 +138,9 @@ namespace TextAnalyticsSample
             Console.Write($"\rDone.                                      \r\n");
         }
 
-        static string getJson(string input, string type, string key, string server_location)
+        static string getJson(string input, string type, string key, string server_location, RestClient client)
         {
-            var client = new RestClient($"https://{server_location}.api.cognitive.microsoft.com/text/analytics/v2.0/{type}");
+            //var client = new RestClient($"https://{server_location}.api.cognitive.microsoft.com/text/analytics/v2.0/{type}");
             var request = new RestRequest(Method.POST);
 
             input = input.Substring(1, input.Length - 2);
@@ -154,13 +157,36 @@ namespace TextAnalyticsSample
 
             string returned_json = response.Content;
 
+            int waitseconds = 60;
+
             if (returned_json.Contains("Rate limit"))
             {
+                string[] jsonsplits = returned_json.Split(':');
+
+                foreach (string splitline in jsonsplits)
+                {
+                    if (splitline.Contains("second"))
+                    {
+                        string[] secondsplit = splitline.Split(' ');
+
+                        for (int counter = 0; counter <= secondsplit.Length; counter++)
+                        {
+                            if (secondsplit[counter + 1].Contains("second"))
+                            {
+                                waitseconds = int.Parse(secondsplit[counter]);
+                                goto skipcounting;
+                            }
+                        }
+                    }
+                }
+
+                skipcounting:
+
                 Console.WriteLine("");
 
-                Console.WriteLine("Asked to wait, waiting for 1 min");
+                Console.WriteLine($"Asked to wait for {waitseconds} second(s)");
 
-                for (int counter = 60; counter >= 0; counter--)
+                for (int counter = waitseconds; counter >= 0; counter--)
                 {
                     Console.Write($"\r{counter} seconds left ");
                     System.Threading.Thread.Sleep(1000);
@@ -176,13 +202,13 @@ namespace TextAnalyticsSample
             return returned_json;
         }
 
-        static string analyze_phrases(string input, string key, string server_location)
+        static string analyze_phrases(string input, string key, string server_location, RestClient pclient)
         {
             if (input.Length > 0)
             {
                 string phrases = "";
 
-                string returned_json = getJson(input, "keyPhrases", key, server_location);
+                string returned_json = getJson(input, "keyPhrases", key, server_location, pclient);
 
                 if (returned_json != "error processing this profile")
                 {
@@ -203,11 +229,11 @@ namespace TextAnalyticsSample
             return "no input";
         }
 
-        static double analyze_sentiment(string input, string key, string server_location)
+        static double analyze_sentiment(string input, string key, string server_location, RestClient sclient)
         {
             if (input.Length > 0)
             {
-                string returned_json = getJson(input, "sentiment", key, server_location);
+                string returned_json = getJson(input, "sentiment", key, server_location, sclient);
 
                 if (returned_json == "error processing this profile")
                     return 0;
@@ -223,5 +249,5 @@ namespace TextAnalyticsSample
 
             return 0;
         }
-    }    
+    }
 }
